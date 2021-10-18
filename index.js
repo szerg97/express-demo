@@ -1,10 +1,26 @@
 const Joi = require('joi'); //returns a class
+const bodyParser = require('body-parser');
+const ejs = require('ejs');
+const mongoose = require('mongoose');
 const express = require('express'); //returns a function
 const app = express();
 
 // call express.json meta the returns a piece of middleware
 // then call app.use() to use it in the request processing pipeline
 app.use(express.json());
+app.use(bodyParser.urlencoded({
+    extended: true
+}));
+
+//connect to db
+mongoose.connect('mongodb://localhost:27017/devconnector');
+
+const articleSchema = {
+    title: String,
+    content: String
+};
+
+const Article = mongoose.model('Article', articleSchema);
 
 const courses = [
     {id: 1, name: 'course1'},
@@ -12,56 +28,75 @@ const courses = [
     {id: 3, name: 'course3'}
 ];
 
-app.get('/', (req, res) => {
-    res.send('Hello World!!!!');
-});
+app.route('/api/articles')
 
-app.get('/api/courses', (req, res) => {
-    res.send(courses);
-});
-
-app.get('/api/courses/:id', (req, res) => {
-    const course = courses.find(c => c.id === parseInt(req.params.id));
-    if(!course) return res.status(404).send('The course with the given ID was not found.');
-    res.send(course);
-});
-
-app.post('/api/courses', (req, res) => {
-    //Validate
-    const { error } = validateCourse(req.body); //object destructor, result.error
-    if(error) return res.status(400).send(error);
-
-    const course = {
-        id: courses.length + 1,
-        name: req.body.name
-    }
-    courses.push(course);
-    res.send(course);
-});
-
-app.put('/api/courses/:id', (req, res) => {
-    const course = courses.find(c => c.id === parseInt(req.params.id));
-    if(!course) return res.status(404).send('The course with the given ID was not found.');
-
-    //Validate
-    const { error } = validateCourse(req.body); //result.error
-    if(error) return res.status(400).send(error.details[0].message);
-
-    //Update course
-    course.name = req.body.name;
-    //Return
-    res.send(course);
-});
-
-app.delete('/api/courses/:id', (req, res) => {
-    const course = courses.find(c => c.id === parseInt(req.params.id));
-    if(!course) return res.status(404).send('The course with the given ID was not found.');
-
-    const idx = courses.indexOf(course);
-    courses.splice(idx, 1);
-
-    res.send(course);
+.get((req, res) => {
+    Article.find((err, foundArticles) => {
+        if(!err)
+            res.send(foundArticles);
+        else
+            res.send(err);
+    });
 })
+
+.post((req, res) => {
+
+    const article = new Article({
+        title: req.body.title,
+        content: req.body.content
+    });
+
+    article.save((err) => {
+        if(!err)
+            res.send(article);
+        else
+            res.send(err);
+    });
+})
+
+.delete((req, res) => {
+    Article.deleteMany((err) => {
+        if(!err)
+            res.send("Deletion successful.");
+        else
+            res.send(err);
+    });
+});
+
+app.route('/api/articles/:title')
+
+.get((req, res) => {
+    Article.findOne({title: req.params.title}, (err, foundArticle) => {
+        if(foundArticle)
+            res.send(foundArticle);
+        else
+            res.status(404).send('No article matching.');
+    });
+})
+
+.put((req, res) => {
+    Article.replaceOne(
+        {title: req.params.title}, 
+        {title: req.body.title, content: req.body.content}, 
+        {overwrite: true},
+        (err) => {
+            if(!err)
+                res.send('Article successfully updated.');
+            else
+                res.send(err.message);
+        });
+})
+
+.delete((req, res) => {
+    Article.deleteOne({
+        title: req.params.title},
+        (err) => {
+            if(!err)
+                res.send("Deletion successful for id-" + req.params.title);
+            else
+                res.send("Deletion failed.")
+        });
+});
 
 function validateCourse(course){
     const schema = {
